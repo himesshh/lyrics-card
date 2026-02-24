@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Generate beautiful lyrics cards for any song. Search, select, customize, download." />
+  <title>Lyrics Card Generator</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    /* ================================================================
+       THEME TOKENS
+    ================================================================ */
+    [data-theme="dark"] {
+      --bg:           #0a0a0a;
+      --surface:      #131313;
+      --surface2:     #1b1b1b;
+      --surface3:     #222;
+      --border:       #252525;
+      --border2:      #303030;
+      --text:         #f0f0f0;
+      --text-sub:     #888;
+      --text-muted:   #444;
+      --accent:       #ff2020;
+      --accent-dim:   rgba(255, 32, 32, 0.13);
+      --accent-glow:  rgba(255, 32, 32, 0.07);
+      --glow-color:   rgba(255, 30, 30, 0.55);
+      --shadow-card:  0 24px 64px rgba(0,0,0,0.6);
+      --toggle-bg:    #1b1b1b;
+      --toggle-icon:  '☀️';
+      --toggle-label: 'Light mode';
+    }
+
+    [data-theme="light"] {
+      --bg:           #f5f4f1;
+      --surface:      #ffffff;
+      --surface2:     #f0eeeb;
+      --surface3:     #e8e6e2;
+      --border:       #e0ddd8;
+      --border2:      #d4d1cc;
+      --text:         #111111;
+      --text-sub:     #666;
+      --text-muted:   #aaa;
+      --accent:       #d91a1a;
+      --accent-dim:   rgba(217, 26, 26, 0.1);
+      --accent-glow:  rgba(217, 26, 26, 0.06);
+      --glow-color:   rgba(217, 26, 26, 0.4);
+      --shadow-card:  0 24px 64px rgba(0,0,0,0.12);
+      --toggle-bg:    #f0eeeb;
+    }
+
+    :root {
+      --radius-sm:    8px;
+      --radius:       14px;
+      --radius-lg:    20px;
+      --ease:         0.26s ease;
+      --font-display: 'Playfair Display', Georgia, serif;
+      --font-body:    'Sora', sans-serif;
+      --font-mono:    'JetBrains Mono', monospace;
+    }
+
+    /* ================================================================
+       RESET
+    ================================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      font-size: 16px;
+      scroll-behavior: smooth;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-weight: 400;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      transition: background 0.35s ease, color 0.35s ease;
+    }
+
+    button { font-family: var(--font-body); cursor: pointer; border: none; outline: none; background: none; }
+    input  { font-family: var(--font-body); outline: none; border: none; }
+    img    { display: block; max-width: 100%; }
+
+    /* ================================================================
+       BACKGROUND — pulsing red glow from center
+    ================================================================ */
+    .bg-glow {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    /* the red orb sitting at exact center */
+    .bg-glow::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 480px;
+      height: 480px;
+      background: radial-gradient(circle, var(--glow-color) 0%, transparent 68%);
+      border-radius: 50%;
+      animation: glowPulse 4s ease-in-out infinite;
+    }
+
+    /* soft outer halo fading to nothing */
+    .bg-glow::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 900px;
+      height: 900px;
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 65%);
+      border-radius: 50%;
+      animation: glowPulse 4s ease-in-out infinite 0.6s;
+    }
+
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1);    }
+      50%       { opacity: 1;   transform: translate(-50%, -50%) scale(1.12); }
+    }
+
+    /* ================================================================
+       THEME TOGGLE BUTTON (fixed top-right)
+    ================================================================ */
+    .theme-btn {
+      position: fixed;
+      top: 1.1rem;
+      right: 1.25rem;
+      z-index: 200;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 50px;
+      padding: 0.38rem 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: background var(--ease), border-color 0.2s, color 0.2s, transform 0.15s;
+      user-select: none;
+    }
+
+    .theme-btn:hover {
+      border-color: var(--accent);
+      color: var(--text);
+      transform: scale(1.04);
+    }
+
+    .theme-btn .t-icon {
+      font-size: 0.9rem;
+      transition: transform 0.4s ease;
+      display: inline-block;
+    }
+
+    .theme-btn:hover .t-icon {
+      transform: rotate(18deg);
+    }
+
+    /* ================================================================
+       ANIMATED LOGO
+    ================================================================ */
+    .logo {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0;
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+      text-decoration: none;
+      overflow: visible;
+      position: relative;
+    }
+
+    /* The animated "L" character */
+    .logo-L {
+      display: inline-block;
+      color: var(--accent);
+      position: relative;
+      animation: letterFall 3.2s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
+      transform-origin: center bottom;
+      will-change: transform, opacity;
+    }
+
+    @keyframes letterFall {
+      /* sit still */
+      0%   { transform: translateY(0);    opacity: 1; }
+      /* start rising up (going off top) */
+      10%  { transform: translateY(-28px); opacity: 0; }
+      /* snap to below */
+      11%  { transform: translateY(22px);  opacity: 0; }
+      /* fall down and land with a small bounce */
+      28%  { transform: translateY(0px);   opacity: 1; }
+      32%  { transform: translateY(-5px);  opacity: 1; }
+      38%  { transform: translateY(0px);   opacity: 1; }
+      /* sit still again */
+      100% { transform: translateY(0);    opacity: 1; }
+    }
+
+    .logo-rest {
+      display: inline-block;
+      color: var(--text);
+    }
+
+    .logo-accent {
+      color: var(--accent);
+    }
+
+    /* ================================================================
+       VIEWS
+    ================================================================ */
+    .view {
+      display: none;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    .view.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ================================================================
+       SITE HEADER
+    ================================================================ */
+    .site-header {
+      padding: 1.4rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: rgba(10,10,10,0.8);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      z-index: 100;
+      transition: background var(--ease), border-color var(--ease);
+    }
+
+    [data-theme="light"] .site-header {
+      background: rgba(245,244,241,0.85);
+    }
+
+    .header-back {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: color var(--ease);
+      padding: 0.4rem 0;
+    }
+
+    .header-back:hover { color: var(--text); }
+
+    .header-back svg {
+      transition: transform var(--ease);
+    }
+
+    .header-back:hover svg {
+      transform: translateX(-3px);
+    }
+
+    /* ================================================================
+       VIEW 1 — SEARCH
+    ================================================================ */
+    .search-hero {
+      width: 100%;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 5.5rem 1.5rem 3rem;
+      text-align: center;
+    }
+
+    .search-eyebrow {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1.2rem;
+    }
+
+    .search-title {
+      font-family: var(--font-display);
+      font-size: clamp(2.2rem, 5vw, 3.4rem);
+      font-weight: 600;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 1rem;
+    }
+
+    .search-title em {
+      font-style: italic;
+      color: var(--text-sub);
+    }
+
+    .search-sub {
+      font-size: 0.88rem;
+      color: var(--text-sub);
+      font-weight: 300;
+      margin-bottom: 2.5rem;
+      line-height: 1.75;
+    }
+
+    .search-bar {
+      position: relative;
+      width: 100%;
+    }
+
+    .search-bar input {
+      width: 100%;
+      background: var(--surface);
+      border: 1.5px solid var(--border2);
+      border-radius: 50px;
+      padding: 1rem 3rem 1rem 3.2rem;
+      font-size: 0.92rem;
+      color: var(--text);
+      transition: border-color var(--ease), box-shadow var(--ease), background var(--ease);
+    }
+
+    .search-bar input::placeholder { color: var(--text-muted); }
+
+    .search-bar input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-dim);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 1.1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0.25rem;
+      border-radius: 50%;
+      display: none;
+      transition: color var(--ease);
+    }
+
+    .search-clear:hover { color: var(--text); }
+
+    /* ================================================================
+       RESULTS GRID
+    ================================================================ */
+    .results-section {
+      width: 100%;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 1.5rem 5rem;
+    }
+
+    .results-label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 1.2rem;
+      padding-left: 0.2rem;
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 1rem;
+    }
+
+    /* Song card */
+    .song-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease, border-color 0.2s;
+      opacity: 0;
+    }
+
+    .song-card.visible { opacity: 1; animation: fadeUp 0.3s ease forwards; }
+
+    .song-card:hover {
+      transform: translateY(-8px) scale(1.02);
+      box-shadow: var(--shadow-card);
+      border-color: var(--border2);
+    }
+
+    .song-card:active {
+      transform: translateY(-2px) scale(1.01);
+    }
+
+    .song-card-thumb {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      background: var(--surface2);
+    }
+
+    .song-card-thumb-placeholder {
+      width: 100%;
+      aspect-ratio: 1;
+      background: var(--surface2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+    }
+
+    .song-card-info {
+      padding: 0.7rem 0.75rem;
+    }
+
+    .song-card-title {
+      font-size: 0.76rem;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 0.2rem;
+    }
+
+    .song-card-artist {
+      font-size: 0.68rem;
+      color: var(--text-sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ================================================================
+       LOADERS & EMPTY STATES
+    ================================================================ */
+    .loading-dots {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      padding: 3rem 0;
+    }
+
+    .loading-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      animation: dotPulse 1.2s ease-in-out infinite;
+    }
+
+    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes dotPulse {
+      0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+      40%            { opacity: 1;   transform: scale(1);   }
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem 0;
+      color: var(--text-muted);
+      font-size: 0.87rem;
+    }
+
+    /* ================================================================
+       VIEW 2 — LYRICS
+    ================================================================ */
+    .lyrics-layout {
+      display: grid;
+      grid-template-columns: 290px 1fr;
+      flex: 1;
+    }
+
+    .lyrics-sidebar {
+      padding: 2rem 1.5rem;
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 73px;
+      height: calc(100vh - 73px);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.4rem;
+      transition: border-color var(--ease);
+    }
+
+    .sidebar-thumb {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      border-radius: var(--radius);
+      background: var(--surface2);
+    }
+
+    .sidebar-thumb-placeholder {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: var(--radius);
+      background: var(--surface2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+    }
+
+    .sidebar-title {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 600;
+      line-height: 1.3;
+      letter-spacing: -0.02em;
+    }
+
+    .sidebar-artist {
+      font-size: 0.82rem;
+      color: var(--text-sub);
+      margin-top: 0.25rem;
+    }
+
+    .selection-info {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 0.9rem 1rem;
+    }
+
+    .selection-info-title {
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .selection-count {
+      font-size: 0.83rem;
+      color: var(--text-sub);
+    }
+
+    .selection-count strong { color: var(--accent); font-weight: 600; }
+
+    .btn-create-card {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border-radius: var(--radius-sm);
+      padding: 0.85rem 1rem;
+      font-size: 0.84rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      transition: opacity var(--ease), transform 0.1s;
+      display: none;
+    }
+
+    .btn-create-card.visible { display: block; }
+    .btn-create-card:hover   { opacity: 0.85; }
+    .btn-create-card:active  { transform: scale(0.98); }
+
+    .lyrics-fallback-wrap { display: none; }
+    .lyrics-fallback-wrap.visible { display: block; }
+
+    .lyrics-fallback-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+    }
+
+    .lyrics-fallback-wrap textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1.5px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: var(--text);
+      resize: vertical;
+      min-height: 110px;
+      transition: border-color var(--ease);
+    }
+
+    .lyrics-fallback-wrap textarea:focus {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .btn-load-manual {
+      margin-top: 0.5rem;
+      width: 100%;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem;
+      font-size: 0.78rem;
+      color: var(--text-sub);
+      transition: color var(--ease), border-color var(--ease);
+    }
+
+    .btn-load-manual:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    /* Lyrics main content */
+    .lyrics-content {
+      padding: 2.5rem 3.5rem;
+      max-width: 700px;
+    }
+
+    .lyrics-source-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      padding: 0.28rem 0.75rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .lyrics-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 1.75rem;
+      line-height: 1.65;
+    }
+
+    .lyrics-hint strong { color: var(--text-sub); }
+
+    .lyrics-lines {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .lyric-line {
+      font-size: 1.05rem;
+      font-weight: 300;
+      line-height: 1.9;
+      color: var(--text);
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      padding: 0.12rem 0.6rem;
+      margin: 0 -0.6rem;
+      transition: background var(--ease), color var(--ease), opacity 0.2s, transform 0.2s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .lyric-line:hover:not(.empty-line) { background: var(--surface2); }
+
+    .lyric-line.selected {
+      background: var(--surface2);
+      font-weight: 400;
+      transform: translateX(5px);
+      border-left: 2px solid var(--accent);
+      padding-left: calc(0.6rem - 2px);
+    }
+
+    .lyric-line.dimmed { opacity: 0.18; }
+
+    .lyric-line.empty-line {
+      height: 0.9rem;
+      cursor: default;
+      pointer-events: none;
+    }
+
+    /* ================================================================
+       VIEW 3 — CARD EDITOR
+    ================================================================ */
+    .card-layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      flex: 1;
+    }
+
+    .card-preview-area {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      min-height: calc(100vh - 73px);
+      transition: background var(--ease), border-color var(--ease);
+    }
+
+    /* The actual card */
+    .lyrics-card {
+      position: relative;
+      width: 400px;
+      height: 400px;
+      border-radius: 18px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 1.75rem;
+      background: #1a1a1a;
+      box-shadow: 0 40px 100px rgba(0,0,0,0.65);
+      transition: box-shadow 0.3s;
+      flex-shrink: 0;
+    }
+
+    .lyrics-card.portrait {
+      width: 340px;
+      height: 560px;
+    }
+
+    .card-bg-image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: blur(30px) brightness(0.32) saturate(1.5);
+      transform: scale(1.12);
+      z-index: 0;
+    }
+
+    .card-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    .card-content {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .card-lyrics-text {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 400;
+      font-style: italic;
+      line-height: 1.6;
+      color: #fff;
+      margin-bottom: 0.7rem;
+      white-space: pre-line;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .card-song-info {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      min-width: 0;
+    }
+
+    .card-thumb-small {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .card-thumb-placeholder {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.1);
+      flex-shrink: 0;
+    }
+
+    .card-title-artist { min-width: 0; }
+
+    .card-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-artist {
+      font-size: 0.63rem;
+      color: rgba(255,255,255,0.55);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-ytm-logo {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.28rem;
+      opacity: 0.85;
+    }
+
+    .card-ytm-logo svg { width: 17px; height: 17px; }
+
+    .card-ytm-label {
+      font-size: 0.56rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      line-height: 1.25;
+    }
+
+    /* Panel */
+    .card-panel {
+      padding: 1.75rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.6rem;
+      overflow-y: auto;
+      max-height: calc(100vh - 73px);
+    }
+
+    .panel-section-title {
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    .format-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    .format-btn {
+      background: var(--surface2);
+      border: 1.5px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 0.65rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-sub);
+      transition: border-color var(--ease), color var(--ease), background var(--ease);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .format-btn.active {
+      border-color: var(--accent);
+      color: var(--text);
+      background: var(--accent-dim);
+    }
+
+    .format-btn:hover:not(.active) { color: var(--text); }
+
+    .format-preview { background: var(--surface3); border-radius: 3px; }
+    .format-preview.square   { width: 28px; height: 28px; }
+    .format-preview.portrait { width: 20px; height: 33px; }
+
+    .text-color-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    .color-text-btn {
+      border: 1.5px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 0.65rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      transition: border-color var(--ease), box-shadow var(--ease);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .color-text-btn.white-text { background: #fff; color: #111; }
+    .color-text-btn.black-text { background: #111; color: #fff; }
+
+    .color-text-btn.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .bg-options { display: flex; flex-direction: column; gap: 0.5rem; }
+
+    .bg-option {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.62rem 0.75rem;
+      border-radius: var(--radius-sm);
+      border: 1.5px solid var(--border2);
+      cursor: pointer;
+      transition: border-color var(--ease), background var(--ease);
+      font-size: 0.8rem;
+      color: var(--text-sub);
+    }
+
+    .bg-option.active {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+      color: var(--text);
+    }
+
+    .bg-option-dot {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 2px solid var(--border2);
+      flex-shrink: 0;
+      transition: border-color var(--ease), background var(--ease);
+    }
+
+    .bg-option.active .bg-option-dot {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .color-picker-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .color-picker-wrap input[type="color"] {
+      width: 44px;
+      height: 44px;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      padding: 0;
+      background: none;
+    }
+
+    .color-picker-hex {
+      flex: 1;
+      background: var(--surface2);
+      border: 1.5px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--text);
+      transition: border-color var(--ease), background var(--ease);
+    }
+
+    .color-picker-hex:focus { border-color: var(--accent); }
+
+    .gradient-controls { display: flex; gap: 0.5rem; }
+
+    .gradient-controls input[type="color"] {
+      flex: 1;
+      height: 44px;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      padding: 0;
+      background: none;
+    }
+
+    .btn-download {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      transition: opacity var(--ease), transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .btn-download:hover  { opacity: 0.85; }
+    .btn-download:active { transform: scale(0.98); }
+
+    /* ================================================================
+       ANIMATIONS
+    ================================================================ */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ================================================================
+       TOAST
+    ================================================================ */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 50px;
+      padding: 0.65rem 1.4rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      z-index: 999;
+      white-space: nowrap;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ================================================================
+       FOOTER
+    ================================================================ */
+    .site-footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      transition: border-color var(--ease);
+    }
+
+    .footer-copy { font-size: 0.72rem; color: var(--text-muted); }
+    .footer-copy strong { color: var(--text-sub); }
+    .footer-legal { font-size: 0.68rem; color: var(--text-muted); }
+
+    /* ================================================================
+       RESPONSIVE
+    ================================================================ */
+    @media (max-width: 1100px) {
+      .results-grid { grid-template-columns: repeat(4, 1fr); }
+      .card-layout  { grid-template-columns: 1fr; }
+
+      .card-preview-area {
+        min-height: auto;
+        padding: 2rem 1.5rem;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .card-panel { max-height: none; }
+    }
+
+    @media (max-width: 820px) {
+      .lyrics-layout { grid-template-columns: 1fr; }
+
+      .lyrics-sidebar {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 1.25rem 1rem;
+        gap: 1rem;
+      }
+
+      .sidebar-thumb,
+      .sidebar-thumb-placeholder {
+        width: 76px;
+        height: 76px;
+        aspect-ratio: 1;
+        border-radius: var(--radius-sm);
+      }
+
+      .lyrics-content { padding: 1.5rem 1.25rem; }
+      .results-grid   { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+
+      .site-header { padding: 1.1rem 1rem; }
+
+      .search-hero { padding: 3.5rem 1rem 2rem; }
+      .results-section { padding: 0 1rem 3rem; }
+    }
+
+    @media (max-width: 480px) {
+      .results-grid { gap: 0.6rem; }
+      .lyrics-card  { width: 290px; height: 290px; }
+      .lyrics-card.portrait { width: 255px; height: 415px; }
+
+      .site-footer {
+        flex-direction: column;
+        text-align: center;
+        padding: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Pulsing background glow -->
+  <div class="bg-glow"></div>
+
+  <!-- Theme toggle — fixed always visible -->
+  <button class="theme-btn" id="themeBtn">
+    <span class="t-icon" id="themeIcon">☀️</span>
+    <span id="themeLabel">Light mode</span>
+  </button>
+
+  <!-- ================================================================
+       VIEW 1 — SEARCH
+  ================================================================ -->
+  <section id="view-search" class="view active">
+
+    <header class="site-header">
+      <span class="logo" id="logoSearch">
+        <span class="logo-L">L</span><span class="logo-rest">yrics <span class="logo-accent">C</span>ard</span>
+      </span>
+    </header>
+
+    <div class="search-hero">
+      <p class="search-eyebrow">YouTube Music</p>
+      <h1 class="search-title">Find a song,<br/><em>make it yours.</em></h1>
+      <p class="search-sub">Search by song title or artist name. Select your favorite lines and generate a shareable card.</p>
+
+      <div class="search-bar">
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="searchInput" placeholder="Song title or artist name..." autocomplete="off" spellcheck="false" />
+        <button class="search-clear" id="searchClear" aria-label="Clear">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="results-section" id="resultsSection" style="display:none;">
+      <p class="results-label" id="resultsLabel">Results</p>
+      <div class="results-grid" id="resultsGrid"></div>
+    </div>
+
+    <footer class="site-footer">
+      <p class="footer-copy">Made by <strong>Himesh</strong></p>
+      <p class="footer-legal">&copy; <span class="year"></span> Himesh. All rights reserved. &nbsp;·&nbsp; No data collected.</p>
+    </footer>
+
+  </section>
+
+  <!-- ================================================================
+       VIEW 2 — LYRICS
+  ================================================================ -->
+  <section id="view-lyrics" class="view">
+
+    <header class="site-header">
+      <span class="logo" id="logoLyrics">
+        <span class="logo-L">L</span><span class="logo-rest">yrics <span class="logo-accent">C</span>ard</span>
+      </span>
+      <button class="header-back" id="backToSearch">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back to search
+      </button>
+    </header>
+
+    <div class="lyrics-layout">
+      <aside class="lyrics-sidebar">
+        <img id="sidebarThumb" class="sidebar-thumb" src="" alt="" style="display:none;" />
+        <div id="sidebarThumbPlaceholder" class="sidebar-thumb-placeholder">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+          </svg>
+        </div>
+
+        <div>
+          <p class="sidebar-title" id="sidebarTitle">—</p>
+          <p class="sidebar-artist" id="sidebarArtist">—</p>
+        </div>
+
+        <div class="selection-info">
+          <p class="selection-info-title">Selected lines</p>
+          <p class="selection-count" id="selectionCount"><strong>0</strong> of 4 selected</p>
+        </div>
+
+        <button class="btn-create-card" id="btnCreateCard">Generate card</button>
+
+        <div class="lyrics-fallback-wrap" id="fallbackWrap">
+          <p class="lyrics-fallback-label">Lyrics not found automatically. Paste them manually:</p>
+          <textarea id="manualLyrics" placeholder="Paste full lyrics here..."></textarea>
+          <button class="btn-load-manual" id="btnLoadManual">Load lyrics</button>
+        </div>
+      </aside>
+
+      <main class="lyrics-content" id="lyricsContent">
+        <div class="loading-dots" id="lyricsLoader">
+          <span></span><span></span><span></span>
+        </div>
+      </main>
+    </div>
+
+  </section>
+
+  <!-- ================================================================
+       VIEW 3 — CARD EDITOR
+  ================================================================ -->
+  <section id="view-card" class="view">
+
+    <header class="site-header">
+      <span class="logo" id="logoCard">
+        <span class="logo-L">L</span><span class="logo-rest">yrics <span class="logo-accent">C</span>ard</span>
+      </span>
+      <button class="header-back" id="backToLyrics">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back to lyrics
+      </button>
+    </header>
+
+    <div class="card-layout">
+
+      <div class="card-preview-area">
+        <div class="lyrics-card" id="lyricsCard">
+          <img class="card-bg-image" id="cardBgImage" src="" alt="" />
+          <div class="card-overlay" id="cardOverlay"></div>
+          <div class="card-content">
+            <p class="card-lyrics-text" id="cardLyricsText"></p>
+            <div class="card-meta">
+              <div class="card-song-info">
+                <img class="card-thumb-small" id="cardThumbSmall" src="" alt="" style="display:none;" />
+                <div id="cardThumbPlaceholder" class="card-thumb-placeholder"></div>
+                <div class="card-title-artist">
+                  <p class="card-title" id="cardTitle"></p>
+                  <p class="card-artist" id="cardArtist"></p>
+                </div>
+              </div>
+              <div class="card-ytm-logo" id="cardYtmLogo">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1.5 14.5v-9l7 4.5-7 4.5z"/>
+                </svg>
+                <span class="card-ytm-label">YouTube<br/>Music</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-panel">
+
+        <div>
+          <p class="panel-section-title">Card format</p>
+          <div class="format-toggle">
+            <button class="format-btn active" data-format="square">
+              <div class="format-preview square"></div>
+              Square
+            </button>
+            <button class="format-btn" data-format="portrait">
+              <div class="format-preview portrait"></div>
+              Portrait
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <p class="panel-section-title">Text color</p>
+          <div class="text-color-toggle">
+            <button class="color-text-btn white-text active" data-textcolor="white">White</button>
+            <button class="color-text-btn black-text" data-textcolor="black">Black</button>
+          </div>
+        </div>
+
+        <div>
+          <p class="panel-section-title">Background</p>
+          <div class="bg-options">
+            <div class="bg-option active" data-bg="albumblur">
+              <div class="bg-option-dot"></div>
+              Blurred album art
+            </div>
+            <div class="bg-option" data-bg="solid">
+              <div class="bg-option-dot"></div>
+              Solid color
+            </div>
+            <div class="bg-option" data-bg="gradient">
+              <div class="bg-option-dot"></div>
+              Gradient
+            </div>
+          </div>
+        </div>
+
+        <div id="solidColorWrap" style="display:none;">
+          <p class="panel-section-title">Pick a color</p>
+          <div class="color-picker-wrap">
+            <input type="color" id="solidColorPicker" value="#1a1a1a" />
+            <input type="text" class="color-picker-hex" id="solidColorHex" value="#1a1a1a" maxlength="7" />
+          </div>
+        </div>
+
+        <div id="gradientColorWrap" style="display:none;">
+          <p class="panel-section-title">Gradient colors</p>
+          <div class="gradient-controls">
+            <input type="color" id="gradientColor1" value="#0f0c29" />
+            <input type="color" id="gradientColor2" value="#302b63" />
+            <input type="color" id="gradientColor3" value="#24243e" />
+          </div>
+        </div>
+
+        <button class="btn-download" id="btnDownload">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download PNG
+        </button>
+
+      </div>
+    </div>
+
+  </section>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ================================================================
+    //  CONFIG
+    // ================================================================
+    const VERCEL_API = 'https://lyrics-card-taupe.vercel.app/api/lyrics';
+    const MAX_LINES  = 4;
+
+    // ================================================================
+    //  STATE
+    // ================================================================
+    const state = {
+      currentSong:     null,
+      allLyricLines:   [],
+      selectedIndices: new Set(),
+      cardTextColor:   'white',
+      cardBgMode:      'albumblur',
+      cardFormat:      'square',
+      solidColor:      '#1a1a1a',
+      gradientColors:  ['#0f0c29', '#302b63', '#24243e'],
+      lyricsSource:    '',
+      isDark:          true
+    };
+
+    // ================================================================
+    //  THEME TOGGLE
+    // ================================================================
+    const themeBtn   = document.getElementById('themeBtn');
+    const themeIcon  = document.getElementById('themeIcon');
+    const themeLabel = document.getElementById('themeLabel');
+
+    themeBtn.addEventListener('click', () => {
+      state.isDark = !state.isDark;
+      document.documentElement.setAttribute('data-theme', state.isDark ? 'dark' : 'light');
+      themeIcon.textContent  = state.isDark ? '☀️' : '🌙';
+      themeLabel.textContent = state.isDark ? 'Light mode' : 'Dark mode';
+    });
+
+    // ================================================================
+    //  UTILS
+    // ================================================================
+    function showView(id) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      window.scrollTo(0, 0);
+    }
+
+    let toastTimer;
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // set year in all footers
+    document.querySelectorAll('.year').forEach(el => {
+      el.textContent = new Date().getFullYear();
+    });
+
+    // logo clicks go home
+    document.querySelectorAll('.logo').forEach(el => {
+      el.addEventListener('click', () => showView('view-search'));
+    });
+
+    // ================================================================
+    //  VIEW 1 — SEARCH
+    // ================================================================
+    const searchInput    = document.getElementById('searchInput');
+    const searchClear    = document.getElementById('searchClear');
+    const resultsSection = document.getElementById('resultsSection');
+    const resultsGrid    = document.getElementById('resultsGrid');
+    const resultsLabel   = document.getElementById('resultsLabel');
+
+    let searchTimer;
+
+    searchInput.addEventListener('input', () => {
+      const val = searchInput.value.trim();
+      searchClear.style.display = val ? 'block' : 'none';
+      clearTimeout(searchTimer);
+      if (!val) { resultsSection.style.display = 'none'; return; }
+      searchTimer = setTimeout(() => doSearch(val), 420);
+    });
+
+    searchClear.addEventListener('click', () => {
+      searchInput.value = '';
+      searchClear.style.display = 'none';
+      resultsSection.style.display = 'none';
+      searchInput.focus();
+    });
+
+    async function doSearch(q) {
+      resultsSection.style.display = 'block';
+      resultsGrid.innerHTML = '<div class="loading-dots" style="grid-column:1/-1;"><span></span><span></span><span></span></div>';
+
+      try {
+        const res  = await fetch(`${VERCEL_API}?action=search&query=${encodeURIComponent(q)}`);
+        const data = await res.json();
+
+        if (!data.results || data.results.length === 0) {
+          resultsGrid.innerHTML = '<p class="empty-state" style="grid-column:1/-1;">No results found. Try a different search.</p>';
+          return;
+        }
+
+        resultsLabel.textContent = `${data.results.length} result${data.results.length !== 1 ? 's' : ''}`;
+        renderResults(data.results);
+
+      } catch {
+        // iTunes fallback
+        try {
+          const itunes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&limit=10`);
+          const idata  = await itunes.json();
+          const mapped = idata.results.map(t => ({
+            id:          t.trackId,
+            title:       t.trackName,
+            artist:      t.artistName,
+            thumbnail:   t.artworkUrl100?.replace('100x100', '300x300') || '',
+            itunesData:  t
+          }));
+
+          if (mapped.length === 0) {
+            resultsGrid.innerHTML = '<p class="empty-state" style="grid-column:1/-1;">No results found.</p>';
+            return;
+          }
+
+          resultsLabel.textContent = `${mapped.length} result${mapped.length !== 1 ? 's' : ''}`;
+          renderResults(mapped);
+        } catch {
+          resultsGrid.innerHTML = '<p class="empty-state" style="grid-column:1/-1;">Something went wrong. Please try again.</p>';
+        }
+      }
+    }
+
+    function renderResults(results) {
+      resultsGrid.innerHTML = '';
+
+      results.forEach((song, i) => {
+        const card = document.createElement('div');
+        card.className = 'song-card';
+        card.style.animationDelay = `${i * 45}ms`;
+
+        const thumbHtml = song.thumbnail
+          ? `<img class="song-card-thumb" src="${song.thumbnail}" alt="${escapeHtml(song.title)}" loading="lazy" />`
+          : `<div class="song-card-thumb-placeholder"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>`;
+
+        card.innerHTML = `
+          ${thumbHtml}
+          <div class="song-card-info">
+            <p class="song-card-title">${escapeHtml(song.title)}</p>
+            <p class="song-card-artist">${escapeHtml(song.artist)}</p>
+          </div>
+        `;
+
+        card.addEventListener('click', () => openSong(song));
+
+        requestAnimationFrame(() => {
+          setTimeout(() => card.classList.add('visible'), i * 45);
+        });
+
+        resultsGrid.appendChild(card);
+      });
+    }
+
+    // ================================================================
+    //  VIEW 2 — LYRICS
+    // ================================================================
+    async function openSong(song) {
+      state.currentSong     = song;
+      state.selectedIndices = new Set();
+      state.allLyricLines   = [];
+
+      const thumb            = document.getElementById('sidebarThumb');
+      const thumbPlaceholder = document.getElementById('sidebarThumbPlaceholder');
+
+      document.getElementById('sidebarTitle').textContent  = song.title;
+      document.getElementById('sidebarArtist').textContent = song.artist;
+
+      if (song.thumbnail) {
+        thumb.src                      = song.thumbnail;
+        thumb.style.display            = 'block';
+        thumbPlaceholder.style.display = 'none';
+      } else {
+        thumb.style.display            = 'none';
+        thumbPlaceholder.style.display = 'flex';
+      }
+
+      document.getElementById('selectionCount').innerHTML = '<strong>0</strong> of 4 selected';
+      document.getElementById('btnCreateCard').classList.remove('visible');
+      document.getElementById('fallbackWrap').classList.remove('visible');
+
+      const content = document.getElementById('lyricsContent');
+      content.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
+
+      showView('view-lyrics');
+
+      // ── Lyrics fetch: fallback chain ──
+      let lyrics = null;
+      let source = '';
+
+      // 1) LRCLIB
+      if (!lyrics) {
+        try {
+          const r = await fetch(`https://lrclib.net/api/search?track_name=${encodeURIComponent(song.title)}&artist_name=${encodeURIComponent(song.artist)}`);
+          const d = await r.json();
+          if (d?.length > 0 && d[0].plainLyrics?.trim().length > 10) {
+            lyrics = d[0].plainLyrics;
+            source = 'LRCLIB';
+          }
+        } catch {}
+      }
+
+      // 2) lyrics.ovh
+      if (!lyrics) {
+        try {
+          const r = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(song.artist)}/${encodeURIComponent(song.title)}`);
+          const d = await r.json();
+          if (d?.lyrics?.trim().length > 10) {
+            lyrics = d.lyrics;
+            source = 'Lyrics.ovh';
+          }
+        } catch {}
+      }
+
+      if (lyrics) {
+        renderLyrics(lyrics, source);
+      } else {
+        content.innerHTML = `<p class="lyrics-hint" style="margin-top:0;">Lyrics could not be found automatically for this song. You can paste them manually in the panel on the left.</p>`;
+        document.getElementById('fallbackWrap').classList.add('visible');
+      }
+    }
+
+    function renderLyrics(rawLyrics, source) {
+      const content = document.getElementById('lyricsContent');
+      const lines   = rawLyrics.split('\n');
+      state.allLyricLines = lines;
+      state.lyricsSource  = source;
+
+      let html = '';
+      if (source) html += `<div class="lyrics-source-badge">Source: ${escapeHtml(source)}</div>`;
+      html += `<p class="lyrics-hint">Click up to <strong>${MAX_LINES} lines</strong> to select them for your card. Click a selected line again to deselect it.</p>`;
+      html += `<div class="lyrics-lines" id="lyricsLines">`;
+
+      lines.forEach((line, i) => {
+        const empty = line.trim() === '';
+        html += `<div class="lyric-line${empty ? ' empty-line' : ''}" data-index="${i}">${empty ? '' : escapeHtml(line)}</div>`;
+      });
+
+      html += '</div>';
+      content.innerHTML = html;
+
+      content.querySelectorAll('.lyric-line:not(.empty-line)').forEach(el => {
+        el.addEventListener('click', () => toggleLine(parseInt(el.dataset.index)));
+      });
+    }
+
+    function toggleLine(index) {
+      if (state.selectedIndices.has(index)) {
+        state.selectedIndices.delete(index);
+      } else {
+        if (state.selectedIndices.size >= MAX_LINES) {
+          showToast(`Max ${MAX_LINES} lines — deselect one to add another.`);
+          return;
+        }
+        state.selectedIndices.add(index);
+      }
+      updateLyricsSelection();
+    }
+
+    function updateLyricsSelection() {
+      const count   = state.selectedIndices.size;
+      const hasAny  = count > 0;
+      const allLines = document.querySelectorAll('.lyric-line:not(.empty-line)');
+
+      allLines.forEach(el => {
+        const i = parseInt(el.dataset.index);
+        el.classList.remove('selected', 'dimmed');
+        if (hasAny) {
+          state.selectedIndices.has(i) ? el.classList.add('selected') : el.classList.add('dimmed');
+        }
+      });
+
+      document.getElementById('selectionCount').innerHTML = `<strong>${count}</strong> of ${MAX_LINES} selected`;
+      document.getElementById('btnCreateCard').classList.toggle('visible', hasAny);
+    }
+
+    document.getElementById('btnLoadManual').addEventListener('click', () => {
+      const raw = document.getElementById('manualLyrics').value.trim();
+      if (!raw) return;
+      renderLyrics(raw, 'Manual');
+      document.getElementById('fallbackWrap').classList.remove('visible');
+    });
+
+    document.getElementById('backToSearch').addEventListener('click', () => showView('view-search'));
+    document.getElementById('backToLyrics').addEventListener('click', () => showView('view-lyrics'));
+
+    document.getElementById('btnCreateCard').addEventListener('click', () => {
+      buildCard();
+      showView('view-card');
+    });
+
+    // ================================================================
+    //  VIEW 3 — CARD
+    // ================================================================
+    function buildCard() {
+      const song = state.currentSong;
+      const sortedIndices = Array.from(state.selectedIndices).sort((a, b) => a - b);
+      const lines = sortedIndices.map(i => state.allLyricLines[i]).filter(Boolean);
+
+      document.getElementById('cardLyricsText').textContent = lines.join('\n');
+      document.getElementById('cardTitle').textContent      = song.title;
+      document.getElementById('cardArtist').textContent     = song.artist;
+
+      const thumbSmall       = document.getElementById('cardThumbSmall');
+      const thumbPlaceholder = document.getElementById('cardThumbPlaceholder');
+
+      if (song.thumbnail) {
+        thumbSmall.src                 = song.thumbnail;
+        thumbSmall.style.display       = 'block';
+        thumbPlaceholder.style.display = 'none';
+      } else {
+        thumbSmall.style.display       = 'none';
+        thumbPlaceholder.style.display = 'block';
+      }
+
+      const bgImg = document.getElementById('cardBgImage');
+      if (song.thumbnail) {
+        bgImg.src           = song.thumbnail;
+        bgImg.style.display = 'block';
+      } else {
+        bgImg.style.display = 'none';
+      }
+
+      applyCardStyle();
+    }
+
+    function applyCardStyle() {
+      const card       = document.getElementById('lyricsCard');
+      const bgImg      = document.getElementById('cardBgImage');
+      const overlay    = document.getElementById('cardOverlay');
+      const logo       = document.getElementById('cardYtmLogo');
+      const lyricsText = document.getElementById('cardLyricsText');
+      const cardTitle  = document.getElementById('cardTitle');
+      const cardArtist = document.getElementById('cardArtist');
+
+      // format
+      card.classList.toggle('portrait', state.cardFormat === 'portrait');
+
+      // text color
+      const isWhite   = state.cardTextColor === 'white';
+      const mainColor = isWhite ? '#ffffff' : '#111111';
+      const subColor  = isWhite ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
+
+      lyricsText.style.color = mainColor;
+      cardTitle.style.color  = mainColor;
+      cardArtist.style.color = subColor;
+      logo.style.color       = mainColor;
+
+      // background
+      bgImg.style.display   = 'none';
+      overlay.style.display = 'none';
+      card.style.background = '';
+
+      if (state.cardBgMode === 'albumblur') {
+        if (state.currentSong?.thumbnail) {
+          bgImg.style.display   = 'block';
+          overlay.style.display = 'block';
+          overlay.style.background = isWhite
+            ? 'linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.22) 60%, transparent 100%)'
+            : 'linear-gradient(to top, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.4) 60%, transparent 100%)';
+        } else {
+          card.style.background = '#1a1a1a';
+        }
+      } else if (state.cardBgMode === 'solid') {
+        card.style.background = state.solidColor;
+      } else if (state.cardBgMode === 'gradient') {
+        const [c1, c2, c3] = state.gradientColors;
+        card.style.background = `linear-gradient(135deg, ${c1} 0%, ${c2} 50%, ${c3} 100%)`;
+      }
+    }
+
+    // format buttons
+    document.querySelectorAll('.format-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.cardFormat = btn.dataset.format;
+        applyCardStyle();
+      });
+    });
+
+    // text color buttons
+    document.querySelectorAll('.color-text-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.color-text-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.cardTextColor = btn.dataset.textcolor;
+        applyCardStyle();
+      });
+    });
+
+    // background options
+    document.querySelectorAll('.bg-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        document.querySelectorAll('.bg-option').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        state.cardBgMode = opt.dataset.bg;
+
+        document.getElementById('solidColorWrap').style.display    = state.cardBgMode === 'solid'    ? 'block' : 'none';
+        document.getElementById('gradientColorWrap').style.display = state.cardBgMode === 'gradient' ? 'block' : 'none';
+
+        applyCardStyle();
+      });
+    });
+
+    // solid color picker
+    const solidPicker = document.getElementById('solidColorPicker');
+    const solidHex    = document.getElementById('solidColorHex');
+
+    solidPicker.addEventListener('input', () => {
+      state.solidColor = solidPicker.value;
+      solidHex.value   = solidPicker.value;
+      applyCardStyle();
+    });
+
+    solidHex.addEventListener('input', () => {
+      const val = solidHex.value.trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+        state.solidColor  = val;
+        solidPicker.value = val;
+        applyCardStyle();
+      }
+    });
+
+    // gradient pickers
+    ['gradientColor1', 'gradientColor2', 'gradientColor3'].forEach((id, i) => {
+      document.getElementById(id).addEventListener('input', (e) => {
+        state.gradientColors[i] = e.target.value;
+        applyCardStyle();
+      });
+    });
+
+    // download
+    document.getElementById('btnDownload').addEventListener('click', async () => {
+      const card = document.getElementById('lyricsCard');
+      const btn  = document.getElementById('btnDownload');
+
+      btn.textContent   = 'Generating...';
+      btn.style.opacity = '0.7';
+
+      try {
+        const canvas   = await html2canvas(card, {
+          scale:           3,
+          useCORS:         true,
+          allowTaint:      true,
+          backgroundColor: null,
+          logging:         false
+        });
+
+        const link     = document.createElement('a');
+        const songName = state.currentSong?.title?.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'lyrics';
+        link.download  = `${songName}-lyrics-card.png`;
+        link.href      = canvas.toDataURL('image/png');
+        link.click();
+
+        showToast('Card downloaded successfully.');
+      } catch (err) {
+        showToast('Download failed — please try again.');
+        console.error(err);
+      } finally {
+        btn.innerHTML   = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download PNG`;
+        btn.style.opacity = '1';
+      }
+    });
+  </script>
+
+</body>
+</html>
